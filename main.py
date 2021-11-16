@@ -21,23 +21,6 @@ def main():
     print(verbs_animal_cell)
     print(verbs_factory)
 
-    # syn = {'enclose': ['enclose'], 'control': ['control', 'coordinate'], 'require': ['require'], 'extract': ['extract'], 'provide': ['provide'], 'synthesize': ['synthesize'], 'produce': ['produce'], 'use': ['use'], 'move': ['move']}
-
-    # mapping = []
-    # idx1, idx2 = 0, 0
-    # while idx1 < len(verbs_animal_cell):
-    #     while idx2 < len(verbs_factory):
-    #         base_verb = verbs_animal_cell[idx1]['verb']
-    #         target_verb = verbs_factory[idx2]['verb']
-    #         if target_verb in syn[base_verb]:
-    #             mapping.append((idx1, idx2))
-    #             idx1 += 1
-    #             break
-    #         idx2 += 1
-    #     idx1 += 1
-    #     idx2 = idx1 + 1
-    #
-    # print(1)
 
 
 
