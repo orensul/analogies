@@ -1,0 +1,9 @@
+1	The plasma membrane encloses the animal cell.
+2	The plasma membrane controls the movement of materials into and out of the cell.
+3	These cellular activities require energy.
+4	The Mitochondria extract energy from food molecules to provide the energy needs of the cell.
+5	Animal cells must also synthesize a variety of proteins and other organic molecules necessary for growth and repair.
+6	Ribosomes Produce these proteins.
+7	The cell may use these proteins or move these proteins out of the cell for use in other cells.
+8	To move organic molecules, the cell contains a complex system of membranes that create channels within the cell.
+9	This system of membranes is called the endoplasmic reticulum.

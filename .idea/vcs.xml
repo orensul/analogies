@@ -2,5 +2,8 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/coref" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/reference-coreference-scorers" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/s2e-coref" vcs="Git" />
   </component>
 </project>
