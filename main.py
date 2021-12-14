@@ -7,8 +7,10 @@ import nltk
 from nltk.corpus import wordnet as wn
 import spacy
 
+
+
 # load english language model
-nlp = spacy.load('en_core_web_sm',disable=['ner','textcat'])
+nlp = spacy.load("en_core_web_sm")
 
 animal_cell_filename = 'animal_cell_span_to_question.jsonl'
 
@@ -53,16 +55,28 @@ def main():
     # v1 = read_parsed_qasrl(igneous_rock_v1_qasrl_result_filename)
     # v2 = read_parsed_qasrl(igneous_rock_v2_qasrl_result_filename)
 
-def sentence_starts_with_verb(text):
-  doc = nlp(text)
-  has_seen_noun_or_propn = False
-  for token in doc:
-    print(token, token.pos_)
-    if token.pos_ == 'VERB' and not has_seen_noun_or_propn:
-      return True
-    if token.pos_ in ['PROPN', 'NOUN']:
-      has_seen_noun_or_propn = True
-  return False
+def get_sent_words_pos(sentence_tokens):
+    sentence_tokens_str = " ".join(sentence_tokens[:-1])
+    doc = nlp(sentence_tokens_str)
+    sentence = next(doc.sents)
+    sentence_words_pos = {}
+    for token in sentence:
+        if token not in sentence_words_pos:
+            sentence_words_pos[str(token)] = token.pos_
+    return sentence_words_pos
+
+def sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity):
+    verbs = [sentence_tokens[idx] for idx in sentence_verbs_indices]
+    sentence_words_pos = get_sent_words_pos(sentence_tokens)
+    has_seen_noun_or_propn = False
+    for word in entity.split(' '):
+        if word in verbs and not has_seen_noun_or_propn:
+            return True
+        if sentence_words_pos[word] in ['PROPN', 'NOUN']:
+            has_seen_noun_or_propn = True
+            continue
+    return False
+
 
 def write_input_to_qasrl(output_filename, input_filename):
     inp = open(input_filename, 'r')
@@ -117,13 +131,15 @@ def read_parsed_qasrl(filename):
     f = open(filename, "r")
     lines = f.readlines()
     question_answers_map = {}
-
+    connected_questions = {}
     for line_idx, line in enumerate(lines):
 
         json_object = json.loads(line)
         sentence_id = json_object['sentenceId']
         sentence_tokens = json_object['sentenceTokens']
         print("sentence " + sentence_id + ": " + " ".join(sentence_tokens))
+
+        sentence_verbs_indices = [d['verbIndex'] for d in json_object['verbs']]
         for idx, verb in enumerate(json_object['verbs']):
             verb_idx = verb['verbIndex']
             print("verb " + str(idx+1) + " (original): " + sentence_tokens[verb_idx])
@@ -138,24 +154,26 @@ def read_parsed_qasrl(filename):
                 elif span_start > verb_idx:
                     beams_after_verb.append(beam)
 
+
             for beam_before in beams_before_verb:
                 question = beam_before['questions'][0]
                 if question['questionSlots']['wh'] not in possible_questions:
                     continue
-                q_slots, q, changed_from_passive_to_active = get_question_from_questions_slots(question['questionSlots'], verb)
+                q_slots, q, verb_time = get_question_from_questions_slots(question['questionSlots'], verb)
                 q_verb = '<verb>' if q_slots['verb'] != '_' else '_'
                 q_sub_verb_obj = q_slots['subj'] + q_verb + q_slots['obj']
-                if changed_from_passive_to_active:
-                    entity_before = " ".join(sentence_tokens[beam_after['span'][0]:beam_after['span'][1]])
-                else:
-                    entity_before = " ".join(sentence_tokens[beam_before['span'][0]:beam_before['span'][1]])
-                print(entity_before)
-                if sentence_starts_with_verb(entity_before):
-                    print("Filter out (question, answer): " + entity_before + ", " + q)
-                    continue
+                entity_before = " ".join(sentence_tokens[beam_before['span'][0]:beam_before['span'][1]])
+                print("Entity before: " + entity_before)
+
                 ans_prob = round(beam_before['spanProb'], 2)
                 q_prob = round(question['questionProb'], 2)
                 print("question with answer before verb: " + q + "\nanswer: " + entity_before + ", answer prob:" + str(ans_prob) + ", question_prob:" + str(q_prob))
+                if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
+                    print("Filter out QA because this question contains subj+verb+obj: " + entity_before + ", " + q)
+                    continue
+                if sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity_before):
+                    print("Filter out QA because answer starts with a verb: " + entity_before + ", " + q)
+                    continue
                 print()
 
                 if (q, q_sub_verb_obj) in question_answers_map:
@@ -163,24 +181,29 @@ def read_parsed_qasrl(filename):
                 else:
                     question_answers_map[(q, q_sub_verb_obj)] = [entity_before]
 
+                connected_questions[(q, q_sub_verb_obj)] = []
+
             for beam_after in beams_after_verb:
                 question = beam_after['questions'][0]
                 if question['questionSlots']['wh'] not in possible_questions:
                     continue
                 q_slots, q, changed_from_passive_to_active = get_question_from_questions_slots(question['questionSlots'], verb)
+                if q_slots['obj2'] != '_':
+                    print(1)
                 q_sub_verb_obj = q_slots['subj'] + q_verb + q_slots['obj']
-                if changed_from_passive_to_active:
-                    entity_after = " ".join(sentence_tokens[beam_before['span'][0]:beam_before['span'][1]])
-                else:
-                    entity_after = " ".join(sentence_tokens[beam_after['span'][0]:beam_after['span'][1]])
-                print(entity_after)
-                if sentence_starts_with_verb(entity_after):
-                    print("Filter out (question, answer): " + entity_after + ", " + q)
-                    continue
+                entity_after = " ".join(sentence_tokens[beam_after['span'][0]:beam_after['span'][1]])
+                print("Entity after: " + entity_after)
+
                 ans_prob = round(beam_after['spanProb'], 2)
                 q_prob = round(question['questionProb'], 2)
                 print("question with answer after verb: " + q + "\nanswer: " + entity_after + ", answer prob:" + str(
                     ans_prob) + ", question_prob:" + str(q_prob))
+                if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
+                    print("Filter out QA because this question contains subj+verb+obj: " + entity_after + ", " + q)
+                    continue
+                if sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity_after):
+                    print("Filter out because answer starts with a verb: " + entity_after + ", " + q)
+                    continue
                 print()
 
 
@@ -224,6 +247,7 @@ def get_active_q_slots_from_passive(question_slots, verb):
 
 def get_question_from_questions_slots(question_slots, verb):
     result = []
+    verb_time = None
     for key, val in question_slots.items():
         if val != '_':
             if key == 'verb':
@@ -232,7 +256,8 @@ def get_question_from_questions_slots(question_slots, verb):
                     verb_to_append = []
                     for word in val_list:
                         if word in verb['verbInflectedForms'] and val_list[0] in ['be', 'being']:
-                            return get_active_q_slots_from_passive(question_slots, verb)
+                            verb_time = word
+                            verb_to_append.append(verb['verbInflectedForms'][word])
                         else:
                             verb_to_append.append(word)
                     result.append(" ".join(verb_to_append))
@@ -241,7 +266,7 @@ def get_question_from_questions_slots(question_slots, verb):
             else:
                 result.append(val)
 
-    return question_slots, " ".join(result) + "?", False
+    return question_slots, " ".join(result) + "?", verb_time
 
 
 
