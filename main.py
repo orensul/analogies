@@ -77,6 +77,15 @@ def sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity):
             continue
     return False
 
+def entity_contains_verb(sentence_tokens, sentence_verbs_indices, entity):
+    verbs = [sentence_tokens[idx] for idx in sentence_verbs_indices]
+    for word in entity.split(' '):
+        if word in verbs:
+            return True
+    return False
+
+
+
 
 def write_input_to_qasrl(output_filename, input_filename):
     inp = open(input_filename, 'r')
@@ -161,7 +170,9 @@ def read_parsed_qasrl(filename):
                     continue
                 q_slots, q, verb_time = get_question_from_questions_slots(question['questionSlots'], verb)
                 q_verb = '<verb>' if q_slots['verb'] != '_' else '_'
-                q_sub_verb_obj = q_slots['subj'] + q_verb + q_slots['obj']
+                q_subj = '<subj>' if q_slots['subj'] != '_' else '_'
+                q_obj = '<obj>' if q_slots['obj'] != '_' else '_'
+                q_sub_verb_obj = q_subj + q_verb + q_obj
                 entity_before = " ".join(sentence_tokens[beam_before['span'][0]:beam_before['span'][1]])
                 print("Entity before: " + entity_before)
 
@@ -171,15 +182,16 @@ def read_parsed_qasrl(filename):
                 if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
                     print("Filter out QA because this question contains subj+verb+obj: " + entity_before + ", " + q)
                     continue
-                if sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity_before):
-                    print("Filter out QA because answer starts with a verb: " + entity_before + ", " + q)
+                if entity_contains_verb(sentence_tokens, sentence_verbs_indices, entity_before):
+                    print("Filter out QA because entity contains verb: " + entity_before + ", " + q)
                     continue
+
                 print()
 
                 if (q, q_sub_verb_obj) in question_answers_map:
-                    question_answers_map[(q, q_sub_verb_obj)].append(entity_before)
+                    question_answers_map[(q, q_sub_verb_obj)].append(entity_before.lower())
                 else:
-                    question_answers_map[(q, q_sub_verb_obj)] = [entity_before]
+                    question_answers_map[(q, q_sub_verb_obj)] = [entity_before.lower()]
 
                 connected_questions[(q, q_sub_verb_obj)] = []
 
@@ -188,9 +200,10 @@ def read_parsed_qasrl(filename):
                 if question['questionSlots']['wh'] not in possible_questions:
                     continue
                 q_slots, q, changed_from_passive_to_active = get_question_from_questions_slots(question['questionSlots'], verb)
-                if q_slots['obj2'] != '_':
-                    print(1)
-                q_sub_verb_obj = q_slots['subj'] + q_verb + q_slots['obj']
+                q_verb = '<verb>' if q_slots['verb'] != '_' else '_'
+                q_subj = '<subj>' if q_slots['subj'] != '_' else '_'
+                q_obj = '<obj>' if q_slots['obj'] != '_' else '_'
+                q_sub_verb_obj = q_subj + q_verb + q_obj
                 entity_after = " ".join(sentence_tokens[beam_after['span'][0]:beam_after['span'][1]])
                 print("Entity after: " + entity_after)
 
@@ -201,17 +214,17 @@ def read_parsed_qasrl(filename):
                 if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
                     print("Filter out QA because this question contains subj+verb+obj: " + entity_after + ", " + q)
                     continue
-                if sentence_starts_with_verb(sentence_tokens, sentence_verbs_indices, entity_after):
-                    print("Filter out because answer starts with a verb: " + entity_after + ", " + q)
+                if entity_contains_verb(sentence_tokens, sentence_verbs_indices, entity_after):
+                    print("Filter out QA because entity contains verb: " + entity_after + ", " + q)
                     continue
                 print()
 
 
 
                 if (q, q_sub_verb_obj) in question_answers_map:
-                    question_answers_map[(q, q_sub_verb_obj)].append(entity_after)
+                    question_answers_map[(q, q_sub_verb_obj)].append(entity_after.lower())
                 else:
-                    question_answers_map[(q, q_sub_verb_obj)] = [entity_after]
+                    question_answers_map[(q, q_sub_verb_obj)] = [entity_after.lower()]
 
         print("\n")
     print("Answers: ")
@@ -222,7 +235,10 @@ def read_parsed_qasrl(filename):
     answer_question_map = {}
     for key, val in question_answers_map.items():
         for item in val:
-            answer_question_map[item] = key
+            if item in answer_question_map:
+                answer_question_map[item].append(key)
+            else:
+                answer_question_map[item] = [key]
 
     print("Answer Question Map")
     print("{")
@@ -266,7 +282,7 @@ def get_question_from_questions_slots(question_slots, verb):
             else:
                 result.append(val)
 
-    return question_slots, " ".join(result) + "?", verb_time
+    return question_slots, " ".join(result).lower() + "?", verb_time
 
 
 
