@@ -33,7 +33,9 @@ animal_cell_text_filename = 'animal_cell.txt'
 
 animal_cell_coref_to_qasrl_filename = "animal_cell_coref_to_qasrl.txt"
 
-possible_questions = {'what', 'who', 'which', 'where'}
+possible_questions = {'what', 'who', 'which'}
+
+ans_prob_threshold = 0.05
 
 def main():
 
@@ -50,8 +52,8 @@ def main():
 
     # write_input_to_qasrl(animal_cell_coref_to_qasrl_filename, animal_cell_coref_filename)
 
-    animal_cell = read_parsed_qasrl(animal_cell_qasrl_result_filename)
-    # factory = read_parsed_qasrl(factory_qasrl_result_filename)
+    # animal_cell = read_parsed_qasrl(animal_cell_qasrl_result_filename)
+    factory = read_parsed_qasrl(factory_qasrl_result_filename)
     # v1 = read_parsed_qasrl(igneous_rock_v1_qasrl_result_filename)
     # v2 = read_parsed_qasrl(igneous_rock_v2_qasrl_result_filename)
 
@@ -140,8 +142,11 @@ def read_parsed_qasrl(filename):
     f = open(filename, "r")
     lines = f.readlines()
     question_answers_map = {}
-    connected_questions = {}
+
+    q_pairs_all_sentences = []
     for line_idx, line in enumerate(lines):
+        if line_idx == 4:
+            print(1)
 
         json_object = json.loads(line)
         sentence_id = json_object['sentenceId']
@@ -151,8 +156,9 @@ def read_parsed_qasrl(filename):
         sentence_verbs_indices = [d['verbIndex'] for d in json_object['verbs']]
         for idx, verb in enumerate(json_object['verbs']):
             verb_idx = verb['verbIndex']
-            print("verb " + str(idx+1) + " (original): " + sentence_tokens[verb_idx])
-            print("verb " + str(idx+1) + " (stem): " + verb['verbInflectedForms']['stem'])
+            original_verb, stemmed_verb = sentence_tokens[verb_idx].lower(), verb['verbInflectedForms']['stem'].lower()
+            print("verb " + str(idx+1) + " (original): " + original_verb)
+            print("verb " + str(idx+1) + " (stem): " + stemmed_verb)
             beams_before_verb = []
             beams_after_verb = []
             for beam in verb['beam']:
@@ -162,7 +168,6 @@ def read_parsed_qasrl(filename):
                     beams_before_verb.append(beam)
                 elif span_start > verb_idx:
                     beams_after_verb.append(beam)
-
 
             for beam_before in beams_before_verb:
                 question = beam_before['questions'][0]
@@ -178,7 +183,13 @@ def read_parsed_qasrl(filename):
 
                 ans_prob = round(beam_before['spanProb'], 2)
                 q_prob = round(question['questionProb'], 2)
-                print("question with answer before verb: " + q + "\nanswer: " + entity_before + ", answer prob:" + str(ans_prob) + ", question_prob:" + str(q_prob))
+                print("question with answer before verb: " + q + "\nanswer: " + entity_before + ", answer prob:" + str(
+                    ans_prob) + ", question_prob:" + str(q_prob))
+
+                if ans_prob <= ans_prob_threshold:
+                    print("Filter out QA because of answer probability which is below the threshold: " + entity_before + ", " + q)
+                    continue
+
                 if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
                     print("Filter out QA because this question contains subj+verb+obj: " + entity_before + ", " + q)
                     continue
@@ -188,12 +199,11 @@ def read_parsed_qasrl(filename):
 
                 print()
 
-                if (q, q_sub_verb_obj) in question_answers_map:
-                    question_answers_map[(q, q_sub_verb_obj)].append(entity_before.lower())
+                if (q, q_sub_verb_obj, original_verb, 'L', idx+1) in question_answers_map:
+                    question_answers_map[(q, q_sub_verb_obj, original_verb, 'L', idx+1)].append(entity_before.lower())
                 else:
-                    question_answers_map[(q, q_sub_verb_obj)] = [entity_before.lower()]
+                    question_answers_map[(q, q_sub_verb_obj, original_verb, 'L', idx+1)] = [entity_before.lower()]
 
-                connected_questions[(q, q_sub_verb_obj)] = []
 
             for beam_after in beams_after_verb:
                 question = beam_after['questions'][0]
@@ -211,6 +221,10 @@ def read_parsed_qasrl(filename):
                 q_prob = round(question['questionProb'], 2)
                 print("question with answer after verb: " + q + "\nanswer: " + entity_after + ", answer prob:" + str(
                     ans_prob) + ", question_prob:" + str(q_prob))
+
+                if ans_prob <= ans_prob_threshold:
+                    print("Filter out QA because of answer probability which is below the threshold: " + entity_after + ", " + q)
+                    continue
                 if q_slots['subj'] != '_' and q_slots['verb'] != '_' and q_slots['obj'] != '_':
                     print("Filter out QA because this question contains subj+verb+obj: " + entity_after + ", " + q)
                     continue
@@ -219,14 +233,20 @@ def read_parsed_qasrl(filename):
                     continue
                 print()
 
-
-
-                if (q, q_sub_verb_obj) in question_answers_map:
-                    question_answers_map[(q, q_sub_verb_obj)].append(entity_after.lower())
+                if (q, q_sub_verb_obj, original_verb, 'R', idx+1) in question_answers_map:
+                    question_answers_map[(q, q_sub_verb_obj, original_verb, 'R', idx+1)].append(entity_after.lower())
                 else:
-                    question_answers_map[(q, q_sub_verb_obj)] = [entity_after.lower()]
+                    question_answers_map[(q, q_sub_verb_obj, original_verb, 'R', idx+1)] = [entity_after.lower()]
+
 
         print("\n")
+
+    print(q_pairs_all_sentences)
+    for pairs in q_pairs_all_sentences:
+        for pair in pairs:
+            q1, q2 = pair[0][0], pair[1][0]
+            print(q1 + " : " + q2)
+
     print("Answers: ")
     for key, val in question_answers_map.items():
         for item in val:
